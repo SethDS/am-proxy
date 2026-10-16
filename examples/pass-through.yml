@@ -1,0 +1,10 @@
+# Minimal pass-through: all alerts → single Alertmanager.
+listen: ":9094"
+backends:
+  default:
+    urls: ["http://alertmanager:9093"]
+    ha_mode: all
+    timeout: 5s
+unmatched: default
+default_backend: default
+rules: []
