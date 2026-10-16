@@ -72,6 +72,24 @@ func TestAlertsCustodyAndDrop(t *testing.T) {
 	}
 }
 
+func Test400OnMalformedJSON(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Backends = map[string]config.Backend{
+		"default": {URLs: []string{"http://127.0.0.1:1"}, HAMode: "all", Timeout: config.Duration(time.Millisecond)},
+	}
+	cfg.DefaultBackend = "default"
+	eng, _ := match.NewEngine(&cfg)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mgr := custody.NewManager(&cfg, log)
+	s := &Server{Log: log, Engine: eng, Custody: mgr, MaxInflight: 100}
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/alerts", bytes.NewReader([]byte(`{not-json`)))
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d want 400", rr.Code)
+	}
+}
+
 func Test503WhenQueueFull(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Queue.MaxAlertsPerBackend = 1

@@ -114,3 +114,82 @@ func TestDropExpiredOnEnqueue(t *testing.T) {
 		t.Fatalf("expired alert should not sit in queue, depth=%d", m.QueueDepth("default"))
 	}
 }
+
+func TestFailurePolicyAuthHold404And429(t *testing.T) {
+	var status atomic.Int32
+	status.Store(http.StatusOK)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		code := int(status.Load())
+		if code == http.StatusTooManyRequests {
+			w.Header().Set("Retry-After", "60")
+		}
+		w.WriteHeader(code)
+	}))
+	defer srv.Close()
+
+	cfg := testCfg([]string{srv.URL}, 100)
+	cfg.Queue.Retry404Max = 2
+	cfg.Queue.RetryInitial = config.Duration(5 * time.Millisecond)
+	cfg.Queue.WorkerCount = 1
+	m := NewManager(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.Start(ctx)
+	defer m.Stop()
+
+	waitUntil := func(pred func() bool) bool {
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if pred() {
+				return true
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return pred()
+	}
+
+	// 401 → auth hold, removed from queue (no rapid retry).
+	status.Store(http.StatusUnauthorized)
+	if err := m.EnqueueAllOrNothing([]GroupedAlerts{{DestKey: "default", Alerts: []model.Alert{
+		{Labels: map[string]string{"case": "auth"}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !waitUntil(func() bool { return len(m.AuthHolds()) >= 1 && m.QueueDepth("default") == 0 }) {
+		t.Fatalf("auth hold missing: holds=%d depth=%d", len(m.AuthHolds()), m.QueueDepth("default"))
+	}
+
+	// 404 → bounded retries then dead-letter.
+	status.Store(http.StatusNotFound)
+	if err := m.EnqueueAllOrNothing([]GroupedAlerts{{DestKey: "default", Alerts: []model.Alert{
+		{Labels: map[string]string{"case": "missing"}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !waitUntil(func() bool {
+		for _, dl := range m.DeadLetters() {
+			if dl.Alert.Labels["case"] == "missing" {
+				return true
+			}
+		}
+		return false
+	}) {
+		t.Fatalf("expected 404 dead-letter, got %+v", m.DeadLetters())
+	}
+
+	// 429 → remain in custody (held), not dead-lettered.
+	status.Store(http.StatusTooManyRequests)
+	beforeDL := len(m.DeadLetters())
+	if err := m.EnqueueAllOrNothing([]GroupedAlerts{{DestKey: "default", Alerts: []model.Alert{
+		{Labels: map[string]string{"case": "rate"}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !waitUntil(func() bool { return m.QueueDepth("default") >= 1 }) {
+		t.Fatal("expected rate-limited alert retained in queue")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if len(m.DeadLetters()) != beforeDL {
+		t.Fatalf("429 should not dead-letter immediately, dead=%d", len(m.DeadLetters())-beforeDL)
+	}
+}
