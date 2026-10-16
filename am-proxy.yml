@@ -1,0 +1,78 @@
+# Example am-proxy configuration (MVP).
+# Point Prometheus alerting.alertmanagers at this proxy.
+
+listen: ":9094"
+log_level: info
+
+queue:
+  max_alerts_per_backend: 50000
+  max_inflight_requests: 512
+  worker_count: 8
+  outbound_batch_size: 200
+  retry_initial: 200ms
+  retry_max: 30s
+  max_retries: 50
+  max_alert_age: 24h
+  retry_404_max: 3
+
+forward:
+  dead_letter_cap: 10000
+
+backends:
+  default:
+    urls:
+      - http://alertmanager:9093
+    ha_mode: all
+    timeout: 5s
+  sre:
+    urls:
+      - http://am-sre-0:9093
+      - http://am-sre-1:9093
+    ha_mode: all
+    timeout: 5s
+
+unmatched: default
+default_backend: default
+
+rules:
+  # Drop Watchdog / heartbeat noise
+  - match:
+      - path: labels.alertname
+        op: exact
+        value: Watchdog
+    action: drop
+
+  # Drop test alerts by annotation summary
+  - match:
+      - path: annotations.summary
+        op: regex
+        value: "(?i)test.?alert"
+    action: drop
+
+  # Critical payments → app AM (named backend)
+  - match:
+      - path: labels.severity
+        op: exact
+        value: critical
+      - path: labels.team
+        op: exact
+        value: payments
+    action: route
+    backend: sre
+
+  # Page/critical → inline URL, continue to also evaluate later rules
+  - match:
+      - path: labels.severity
+        op: regex
+        value: "page|critical"
+    action: route
+    url: http://am-pager:9093
+    continue: true
+
+  # SRE team catch-all style route
+  - match:
+      - path: labels.team
+        op: exact
+        value: sre
+    action: route
+    backend: sre
