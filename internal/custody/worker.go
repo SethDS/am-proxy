@@ -148,6 +148,8 @@ func (m *Manager) applyFailure(key string, batch []Item, res forward.Result) {
 			batch[i].Attempts++
 			batch[i].HoldUntil = until
 		}
+		metrics.AlertsHeld.WithLabelValues(key, "rate_limited").Add(float64(len(batch)))
+		metrics.ForwardRetries.WithLabelValues(key, "rate_limited").Add(float64(len(batch)))
 		if q := m.queue(key); q != nil {
 			q.requeue(batch)
 		}
@@ -194,6 +196,7 @@ func (m *Manager) requeueWithPolicy(key string, batch []Item, mutate func(*Item)
 		m.deadLetterBatch(key, dead, reason+"_limit", status)
 	}
 	if len(again) > 0 {
+		metrics.ForwardRetries.WithLabelValues(key, reason).Add(float64(len(again)))
 		if q := m.queue(key); q != nil {
 			q.requeue(again)
 		}

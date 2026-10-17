@@ -13,6 +13,7 @@ import (
 	"github.com/SethDS/am-proxy/internal/config"
 	"github.com/SethDS/am-proxy/internal/custody"
 	"github.com/SethDS/am-proxy/internal/match"
+	"github.com/SethDS/am-proxy/internal/metrics"
 	"github.com/SethDS/am-proxy/internal/obs"
 )
 
@@ -20,6 +21,8 @@ func main() {
 	configFile := flag.String("config.file", "am-proxy.yml", "Path to am-proxy.yml")
 	listen := flag.String("listen-address", "", "Listen address (overrides config)")
 	flag.Parse()
+
+	metrics.RegisterRuntime()
 
 	cfg, err := config.Load(*configFile)
 	if err != nil {
