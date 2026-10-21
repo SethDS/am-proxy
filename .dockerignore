@@ -1,0 +1,14 @@
+.git
+.gitignore
+.gitattributes
+docs
+*.md
+!README.md
+**/*_test.go
+**/testdata
+.cursor
+internal/**/coverage*
+coverage*
+*.out
+compose.yaml
+docker-compose.yml

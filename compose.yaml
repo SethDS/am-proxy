@@ -1,0 +1,21 @@
+# Local smoke: am-proxy only (no fake Alertmanager).
+# Build & run: docker compose up --build
+#             podman compose up --build
+#
+# Health check: curl -sf http://127.0.0.1:9094/-/healthy
+
+services:
+  am-proxy:
+    build:
+      context: .
+      platforms:
+        - linux/amd64
+    image: am-proxy:local
+    ports:
+      - "9094:9094"
+    volumes:
+      # Host config → container path documented in README
+      - ./examples/container/am-proxy.yml:/etc/am-proxy/am-proxy.yml:ro,Z
+    command: ["--config.file=/etc/am-proxy/am-proxy.yml"]
+    # Optional: override listen without editing YAML
+    # command: ["--config.file=/etc/am-proxy/am-proxy.yml", "--listen-address=:9094"]
