@@ -85,6 +85,34 @@ See `am-proxy.yml` and `examples/pass-through.yml`.
 - `--config.file=am-proxy.yml`
 - `--listen-address=:9094` (overrides config `listen`)
 
+## Install as a binary (systemd / RHEL)
+
+Build a static linux/amd64 binary, install config + unit, run as a dedicated non-root user:
+
+```bash
+# Build (from a machine with Go 1.22+)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o am-proxy ./cmd/am-proxy
+
+# On the target host
+sudo useradd --system --home-dir /var/lib/am-proxy --create-home --shell /sbin/nologin am-proxy
+sudo install -d -o root -g am-proxy -m 0755 /etc/am-proxy
+sudo install -o root -g am-proxy -m 0640 am-proxy.yml /etc/am-proxy/am-proxy.yml   # or examples/pass-through.yml
+sudo install -o root -g root -m 0755 am-proxy /usr/local/bin/am-proxy
+sudo install -o root -g root -m 0644 deploy/am-proxy.service /etc/systemd/system/am-proxy.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now am-proxy
+curl -sf http://127.0.0.1:9094/-/healthy
+```
+
+Listen address comes from `listen` in `/etc/am-proxy/am-proxy.yml` (default `:9094`). Optional firewalld:
+
+```bash
+sudo firewall-cmd --add-port=9094/tcp --permanent && sudo firewall-cmd --reload
+```
+
+Unit file: `deploy/am-proxy.service`. For containers instead, see below.
+
 ## Container image (Docker / Podman)
 
 Multi-stage `Dockerfile` builds a static binary and runs it as non-root on **UBI 9 minimal** (`linux/amd64`). **aarch64** is a future target — pass `--platform linux/amd64` on arm hosts for now.
