@@ -1,0 +1,33 @@
+# Container / Podman example config.
+# Mount over /etc/am-proxy/am-proxy.yml (or /config/am-proxy.yml) in production.
+#
+# Point backends.urls at Alertmanagers reachable from the container network.
+
+listen: ":9094"
+log_level: info
+
+queue:
+  max_alerts_per_backend: 50000
+  max_inflight_requests: 512
+  worker_count: 8
+  outbound_batch_size: 200
+  retry_initial: 200ms
+  retry_max: 30s
+  max_retries: 50
+  max_alert_age: 24h
+  retry_404_max: 3
+
+forward:
+  dead_letter_cap: 10000
+
+backends:
+  default:
+    urls:
+      # Replace with a real Alertmanager (or a host reachable via host.containers.internal / host.docker.internal).
+      - http://127.0.0.1:9093
+    ha_mode: all
+    timeout: 5s
+
+unmatched: default
+default_backend: default
+rules: []

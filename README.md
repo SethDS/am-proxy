@@ -85,6 +85,80 @@ See `am-proxy.yml` and `examples/pass-through.yml`.
 - `--config.file=am-proxy.yml`
 - `--listen-address=:9094` (overrides config `listen`)
 
+## Container image (Docker / Podman)
+
+Multi-stage `Dockerfile` builds a static binary and runs it as non-root on **UBI 9 minimal** (`linux/amd64`). **aarch64** is a future target — pass `--platform linux/amd64` on arm hosts for now.
+
+| Item | Value |
+|------|--------|
+| Listen port | **9094** (`EXPOSE 9094`; config `listen` / `--listen-address`) |
+| Default config in image | `/etc/am-proxy/am-proxy.yml` |
+| Mount path (recommended) | `/etc/am-proxy/am-proxy.yml` |
+| Alternate mount | `/config/am-proxy.yml` (pass `--config.file=/config/am-proxy.yml`) |
+| User | UID/GID **10001** (non-root) |
+
+### Build
+
+```bash
+# Docker
+docker build --platform linux/amd64 -t am-proxy:local .
+
+# Podman (same Dockerfile works)
+podman build --platform linux/amd64 -t am-proxy:local .
+```
+
+### Run (Docker)
+
+```bash
+docker run --rm -p 9094:9094 \
+  -v "$(pwd)/examples/container/am-proxy.yml:/etc/am-proxy/am-proxy.yml:ro" \
+  am-proxy:local
+```
+
+### Run on RHEL with Podman
+
+```bash
+# Build
+podman build --platform linux/amd64 -t am-proxy:local .
+
+# Run with SELinux-friendly volume label (:Z) and published port
+podman run --rm -p 9094:9094 \
+  -v /etc/am-proxy/am-proxy.yml:/etc/am-proxy/am-proxy.yml:ro,Z \
+  am-proxy:local
+
+# Or mount under /config and point the flag
+podman run --rm -p 9094:9094 \
+  -v /path/to/am-proxy.yml:/config/am-proxy.yml:ro,Z \
+  am-proxy:local --config.file=/config/am-proxy.yml
+```
+
+Open the port on the host if firewalld is enabled:
+
+```bash
+sudo firewall-cmd --add-port=9094/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+Quick checks:
+
+```bash
+curl -sf http://127.0.0.1:9094/-/healthy
+curl -sf http://127.0.0.1:9094/-/ready
+```
+
+Edit mounted `am-proxy.yml` so `backends.*.urls` reach Alertmanagers from the container network (not `127.0.0.1` unless you use host networking).
+
+### Compose (local smoke)
+
+Proxy-only compose file — no fake Alertmanager:
+
+```bash
+docker compose up --build
+# or: podman compose up --build
+```
+
+See `compose.yaml` and `examples/container/am-proxy.yml`.
+
 ## Develop
 
 ```bash
