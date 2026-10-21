@@ -40,6 +40,16 @@ alerting:
 
 No ingress auth in MVP (use network policy / private mesh).
 
+## Metrics
+
+`GET /metrics` serves Prometheus exposition format (unauthenticated in MVP — restrict with network policy). Series are prefixed `am_proxy_*`, plus standard `go_*` / `process_*` runtime collectors.
+
+```bash
+curl -sS localhost:9094/metrics | grep '^am_proxy_'
+```
+
+Useful series include ingress (`am_proxy_alerts_received_total`, `am_proxy_http_requests_total`), custody (`am_proxy_queue_depth`, `am_proxy_queue_capacity`, `am_proxy_enqueue_rejections_total`), drops/expiry/dead-letter/auth-hold, and forward latency/errors/retries. See `docs/metrics-endpoint-agent-brief.md` for the full catalog.
+
 ## Matching & routing
 
 Rules in `am-proxy.yml` are evaluated in order:

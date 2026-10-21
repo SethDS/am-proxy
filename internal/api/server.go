@@ -17,11 +17,11 @@ import (
 )
 
 type Server struct {
-	Log            *slog.Logger
-	Engine         *match.Engine
-	Custody        *custody.Manager
-	MaxInflight    int
-	inflight       atomic.Int64
+	Log         *slog.Logger
+	Engine      *match.Engine
+	Custody     *custody.Manager
+	MaxInflight int
+	inflight    atomic.Int64
 }
 
 func (s *Server) Handler() http.Handler {
@@ -39,6 +39,10 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+func recordHTTP(code int) {
+	metrics.HTTPRequests.WithLabelValues(strconv.Itoa(code)).Inc()
+}
+
 func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	n := s.inflight.Add(1)
 	metrics.InflightRequests.Set(float64(n))
@@ -48,6 +52,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 	if s.MaxInflight > 0 && int(n) > s.MaxInflight {
 		metrics.EnqueueRejections.Inc()
+		recordHTTP(http.StatusServiceUnavailable)
 		http.Error(w, "too many in-flight requests", http.StatusServiceUnavailable)
 		return
 	}
@@ -55,6 +60,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	var alerts []model.Alert
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&alerts); err != nil {
+		recordHTTP(http.StatusBadRequest)
 		http.Error(w, "invalid alert payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -77,6 +83,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 			spec, err := s.Custody.ResolveDest(dest.Backend, dest.URL)
 			if err != nil {
 				s.Log.Error("resolve destination", "err", err)
+				recordHTTP(http.StatusInternalServerError)
 				http.Error(w, "configuration error", http.StatusInternalServerError)
 				return
 			}
@@ -95,13 +102,16 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.Custody.EnqueueAllOrNothing(groups); err != nil {
 		if errors.Is(err, custody.ErrFull) {
+			recordHTTP(http.StatusServiceUnavailable)
 			http.Error(w, "custody queues full", http.StatusServiceUnavailable)
 			return
 		}
 		s.Log.Error("enqueue failed", "err", err)
+		recordHTTP(http.StatusInternalServerError)
 		http.Error(w, "enqueue failed", http.StatusInternalServerError)
 		return
 	}
 
+	recordHTTP(http.StatusOK)
 	w.WriteHeader(http.StatusOK)
 }

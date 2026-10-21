@@ -21,6 +21,8 @@ type queue struct {
 func newQueue(destKey string, max int) *queue {
 	q := &queue{max: max, destKey: destKey}
 	q.notEmpty = sync.NewCond(&q.mu)
+	metrics.QueueCapacity.WithLabelValues(destKey).Set(float64(max))
+	metrics.QueueDepth.WithLabelValues(destKey).Set(0)
 	return q
 }
 
