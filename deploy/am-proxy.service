@@ -1,0 +1,20 @@
+[Unit]
+Description=am-proxy — Prometheus to Alertmanager routing proxy
+Documentation=https://github.com/SethDS/am-proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=am-proxy
+Group=am-proxy
+ExecStart=/usr/local/bin/am-proxy --config.file=/etc/am-proxy/am-proxy.yml
+Restart=on-failure
+RestartSec=5s
+
+# Optional hardening (safe for memory-only MVP; config is read from /etc)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
