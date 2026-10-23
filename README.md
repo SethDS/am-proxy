@@ -1,5 +1,7 @@
 # am-proxy
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 Go proxy between Prometheus and one or more Alertmanager instances.
 
 Prometheus posts alerts to the proxy; rules in `am-proxy.yml` match on **any alert property** (dotted paths, exact or regex), then **drop** or **route**. The proxy takes **custody** of alerts (in-memory queue + retry) so bursts and backend failures do not silently drop them.
@@ -195,3 +197,7 @@ go build -o am-proxy ./cmd/am-proxy
 ```
 
 Module: `github.com/SethDS/am-proxy`
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
